@@ -246,13 +246,13 @@ Implementations of other state-of-the-art pooling functions cited in the paper f
 
 | Literature Name | Function Name in Densatio | 1D | 2D | 3D |
 | :--- | :--- | :---: | :---: | :---: |
-| Lip | `lip_pooling` | ✅ | ❌ | ❌ |
-| SoftPool | `soft_pooling` | ✅ | ❌ | ❌ |
-| Mam | `mam_pooling` | ✅ | ❌ | ❌ |
-| Lbp | `lbp_pooling` | ✅ | ❌ | ❌ |
-| LbpRI | `lbpri_pooling` | ✅ | ❌ | ❌ |
-| Avg-topk | `avg_topk_pooling` | ✅ | ❌ | ❌ |
-| T-Max-Avg | `t_max_avg_pooling` | ✅ | ❌ | ❌ |
+| Lip | `lip_pooling` | ❌ | ✅ | ❌ |
+| SoftPool | `soft_pooling` | ❌ | ✅ | ❌ |
+| Mam | `mam_pooling` | ❌ | ✅ | ❌ |
+| Lbp | `lbp_pooling` | ❌ | ✅ | ❌ |
+| LbpRI | `lbpri_pooling` | ❌ | ✅ | ❌ |
+| Avg-topk | `avg_topk_pooling` | ❌ | ✅ | ❌ |
+| T-Max-Avg | `t_max_avg_pooling` | ❌ | ✅ | ❌ |
 
 ## 📄 Citation
 
