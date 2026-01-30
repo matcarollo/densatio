@@ -267,6 +267,7 @@ If you use the generalized pooling functions in your research, please cite the o
   year={2026},
   publisher={Elsevier}
 }
+```
 
 ## 📝 License
 
