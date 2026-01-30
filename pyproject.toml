@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "densatio"
+version = "0.1.0"
+authors = [
+    {name = "Matteo Carollo", email = "mcarollo@unisa.it"}
+]
+description = "Custom pooling operations for PyTorch"
+readme = "README.md"
+requires-python = ">=3.8"
+
+dependencies = [
+    "torch",
+    "numpy",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
