@@ -219,6 +219,44 @@ pool = CustomPooling1d(
 )
 ```
 
+### 4. Clamped Trainable Parameters
+You can optionally constrain learnable pooling parameters with `clamp=(min, max)`.
+
+This is useful when a pooling function involves exponentiation, inverse exponents, or other operations that can become numerically unstable during training. The clamp is applied to the parameter values before calling the pooling function, while the original learnable parameter is still optimized by PyTorch.
+
+```python
+import torch
+from densatio import CustomPooling2d
+
+# Example: shared 2D exponent kernel with constrained range
+pool = CustomPooling2d(
+    pool_size=2,
+    stride=2,
+    padding='same',
+    pooling_method="weighted_max_pooling_2d",
+    pooling_params={
+        'e_exponent': {
+            'shape': (1, 2, 2),
+            'init_value': 0.5,
+            'requires_grad': True,
+            'clamp': (1e-6, 10.0),
+        }
+    }
+)
+
+x = torch.rand(1, 64, 32, 32)
+out = pool(x)
+print(out.shape)  # (1, 64, 16, 16)
+```
+
+You can also clamp only one side of the range:
+
+```python
+'clamp': (1e-6, None)   # only lower bound
+'clamp': (None, 10.0)   # only upper bound
+'clamp': (None, None)   # default, no clamping
+```
+
 ---
 
 ## 📚 Available Functions

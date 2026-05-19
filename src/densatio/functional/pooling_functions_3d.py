@@ -7,11 +7,9 @@ def max_pooling_3d(x):
     Output: (B, D_out, H_out, W_out, C)
     """
     return torch.max(
-        torch.max(
-            torch.max(x, dim=-1, keepdim=True)[0],
-            dim=-2, keepdim=True
-        )[0],
-        dim=-3, keepdim=True
+        torch.max(torch.max(x, dim=-1, keepdim=True)[0], dim=-2, keepdim=True)[0],
+        dim=-3,
+        keepdim=True,
     )[0]
 
 
@@ -21,11 +19,9 @@ def product_pooling_3d(x):
     Output: (B, D_out, H_out, W_out, C)
     """
     return torch.prod(
-        torch.prod(
-            torch.prod(x, dim=-1, keepdim=True),
-            dim=-2, keepdim=True
-        ),
-        dim=-3, keepdim=True
+        torch.prod(torch.prod(x, dim=-1, keepdim=True), dim=-2, keepdim=True),
+        dim=-3,
+        keepdim=True,
     )
 
 
@@ -34,14 +30,18 @@ def weighted_product_pooling_3d(x, e_exponent, epsilon=1e-4):
     Input: (B, D_out, H_out, W_out, C, K_d, K_h, K_w)
     Output: (B, D_out, H_out, W_out, C)
     """
-    e_exp = e_exponent.unsqueeze(0).unsqueeze(0).unsqueeze(0).unsqueeze(0)  # (1, 1, 1, 1, C, K_d, K_h, K_w)
+    e_exp = (
+        e_exponent.unsqueeze(0).unsqueeze(0).unsqueeze(0).unsqueeze(0)
+    )  # (1, 1, 1, 1, C, K_d, K_h, K_w)
     x_safe = torch.clamp(x + epsilon, min=epsilon)
     return torch.prod(
         torch.prod(
             torch.prod(torch.pow(x_safe, e_exp), dim=-1, keepdim=True),
-            dim=-2, keepdim=True
+            dim=-2,
+            keepdim=True,
         ),
-        dim=-3, keepdim=True
+        dim=-3,
+        keepdim=True,
     )
 
 
@@ -55,9 +55,11 @@ def complement_weighted_product_pooling_3d(x, e_exponent, epsilon=1e-4):
     return 1 - torch.prod(
         torch.prod(
             torch.prod(torch.pow(comp_safe, e_exp), dim=-1, keepdim=True),
-            dim=-2, keepdim=True
+            dim=-2,
+            keepdim=True,
         ),
-        dim=-3, keepdim=True
+        dim=-3,
+        keepdim=True,
     )
 
 
@@ -71,9 +73,11 @@ def weighted_max_pooling_3d(x, e_exponent, epsilon=1e-4):
     return torch.max(
         torch.max(
             torch.max(torch.pow(x_safe, e_exp), dim=-1, keepdim=True)[0],
-            dim=-2, keepdim=True
+            dim=-2,
+            keepdim=True,
         )[0],
-        dim=-3, keepdim=True
+        dim=-3,
+        keepdim=True,
     )[0]
 
 
@@ -87,9 +91,11 @@ def complement_weighted_max_pooling_3d(x, e_exponent, epsilon=1e-4):
     return torch.max(
         torch.max(
             torch.max(torch.pow(comp_safe, e_exp), dim=-1, keepdim=True)[0],
-            dim=-2, keepdim=True
+            dim=-2,
+            keepdim=True,
         )[0],
-        dim=-3, keepdim=True
+        dim=-3,
+        keepdim=True,
     )[0]
 
 
@@ -99,11 +105,9 @@ def min_pooling_3d(x):
     Output: (B, D_out, H_out, W_out, C)
     """
     return torch.min(
-        torch.min(
-            torch.min(x, dim=-1, keepdim=True)[0],
-            dim=-2, keepdim=True
-        )[0],
-        dim=-3, keepdim=True
+        torch.min(torch.min(x, dim=-1, keepdim=True)[0], dim=-2, keepdim=True)[0],
+        dim=-3,
+        keepdim=True,
     )[0]
 
 
@@ -118,9 +122,11 @@ def weighted_min_pooling_3d(x, e_exponent, epsilon=1e-4):
     return torch.min(
         torch.min(
             torch.min(torch.pow(x_safe, e_exp), dim=-1, keepdim=True)[0],
-            dim=-2, keepdim=True
+            dim=-2,
+            keepdim=True,
         )[0],
-        dim=-3, keepdim=True
+        dim=-3,
+        keepdim=True,
     )[0]
 
 
@@ -131,13 +137,18 @@ def complement_weighted_min_pooling_3d(x, e_exponent, epsilon=1e-4):
     """
     e_exp = e_exponent.unsqueeze(0).unsqueeze(0).unsqueeze(0).unsqueeze(0)
     comp_safe = torch.clamp(1 - x + epsilon, min=epsilon)
-    return 1 - torch.min(
-        torch.min(
-            torch.min(torch.pow(comp_safe, e_exp), dim=-1, keepdim=True)[0],
-            dim=-2, keepdim=True
-        )[0],
-        dim=-3, keepdim=True
-    )[0]
+    return (
+        1
+        - torch.min(
+            torch.min(
+                torch.min(torch.pow(comp_safe, e_exp), dim=-1, keepdim=True)[0],
+                dim=-2,
+                keepdim=True,
+            )[0],
+            dim=-3,
+            keepdim=True,
+        )[0]
+    )
 
 
 def pg_min_in_3d(x, e_exponent, epsilon=1e-4):
@@ -150,9 +161,11 @@ def pg_min_in_3d(x, e_exponent, epsilon=1e-4):
     return torch.max(
         torch.max(
             torch.max(1 - torch.pow(x_safe, e_exp), dim=-1, keepdim=True)[0],
-            dim=-2, keepdim=True
+            dim=-2,
+            keepdim=True,
         )[0],
-        dim=-3, keepdim=True
+        dim=-3,
+        keepdim=True,
     )[0]
 
 
@@ -166,9 +179,11 @@ def pg_max_inv_exp_3d(x, e_exponent, epsilon=1e-4):
     return torch.max(
         torch.max(
             torch.max(torch.pow(x_safe, 1.0 / e_exp), dim=-1, keepdim=True)[0],
-            dim=-2, keepdim=True
+            dim=-2,
+            keepdim=True,
         )[0],
-        dim=-3, keepdim=True
+        dim=-3,
+        keepdim=True,
     )[0]
 
 
@@ -182,9 +197,11 @@ def pg_prod_in_3d(x, e_exponent, epsilon=1e-4):
     return torch.prod(
         torch.prod(
             torch.prod(1 - torch.pow(x_safe, e_exp), dim=-1, keepdim=True),
-            dim=-2, keepdim=True
+            dim=-2,
+            keepdim=True,
         ),
-        dim=-3, keepdim=True
+        dim=-3,
+        keepdim=True,
     )
 
 
@@ -198,10 +215,14 @@ def pg_prod_in_out_3d(x, r_exponent, s_exponent, epsilon=1e-4):
     x_safe = torch.clamp(x + epsilon, min=epsilon)
     return 1 - torch.prod(
         torch.prod(
-            torch.prod(1 - torch.pow(torch.pow(x_safe, r_exp), s_exp), dim=-1, keepdim=True),
-            dim=-2, keepdim=True
+            torch.prod(
+                1 - torch.pow(torch.pow(x_safe, r_exp), s_exp), dim=-1, keepdim=True
+            ),
+            dim=-2,
+            keepdim=True,
         ),
-        dim=-3, keepdim=True
+        dim=-3,
+        keepdim=True,
     )
 
 
@@ -214,14 +235,17 @@ def pg_prod_out_dist_3d(x, r_exponent, k_exponent, epsilon=1e-4):
     k_exp = k_exponent.view(1, 1, 1, 1, 1, 1, 1, 1)
     comp_safe = torch.clamp(1 - x + epsilon, min=epsilon)
     return torch.pow(
-        1 - torch.prod(
+        1
+        - torch.prod(
             torch.prod(
                 torch.prod(1 - torch.pow(comp_safe, r_exp), dim=-1, keepdim=True),
-                dim=-2, keepdim=True
+                dim=-2,
+                keepdim=True,
             ),
-            dim=-3, keepdim=True
+            dim=-3,
+            keepdim=True,
         ),
-        k_exp
+        k_exp,
     )
 
 
@@ -239,8 +263,10 @@ def pg_prod_in_out_dist_3d(x, r_exponent, s_exponent, k_exponent, epsilon=1e-4):
     prod_term = torch.prod(
         torch.prod(
             torch.prod(torch.pow(inner_term, s_exp), dim=-1, keepdim=True),
-            dim=-2, keepdim=True
+            dim=-2,
+            keepdim=True,
         ),
-        dim=-3, keepdim=True
+        dim=-3,
+        keepdim=True,
     )
     return torch.pow(1 - prod_term, k_exp)

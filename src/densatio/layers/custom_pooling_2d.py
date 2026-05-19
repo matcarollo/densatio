@@ -37,7 +37,8 @@ class CustomPooling2d(nn.Module):
             pooling_method (str or callable): Name of function in `pooling_functions_2d` or a callable.
                 Defaults to 'max_pooling_2d'.
             pooling_params (dict, optional): Config for learnable parameters
-                (keys: 'shape', 'init_value', 'requires_grad').
+                (keys: 'shape', 'init_value', 'requires_grad', 'clamp').
+                The 'clamp' entry must be a tuple (min, max), where each value can be None.
         """
         super(CustomPooling2d, self).__init__()
 
@@ -76,6 +77,7 @@ class CustomPooling2d(nn.Module):
 
         self.pooling_params = nn.ParameterDict()
         self.pooling_constants = {}
+        self.pooling_param_clamps: Dict[str, Tuple[Optional[float], Optional[float]]] = {}
 
         if pooling_params is not None:
             for param_name, param_config in pooling_params.items():
@@ -139,43 +141,38 @@ class CustomPooling2d(nn.Module):
                 - tuple(C, H, W) [Per-Channel]
         """
 
-        # 1. Strict type check: must be a dictionary
         if not isinstance(param_config, dict):
             raise TypeError(
-                f"Param '{param_name}': Configuration must be a dictionary (e.g., {{'shape': (C, H, W), 'init_value': 0.5}}). "
+                f"Param '{param_name}': Configuration must be a dictionary "
+                f"(e.g., {{'shape': (C, H, W), 'init_value': 0.5}}). "
                 f"Got {type(param_config).__name__} instead."
             )
 
         shape_arg = param_config.get('shape')
         init_arg = param_config.get('init_value')
         requires_grad = param_config.get('requires_grad', True)
+        clamp = param_config.get('clamp', (None, None))
 
         if init_arg is None:
             init_arg = 0.5
 
-        # --- Final Shape Determination ---
         if shape_arg is not None:
             if isinstance(shape_arg, int):
-                # (1, S, S) Shared Square
                 final_shape = (1, shape_arg, shape_arg)
             elif isinstance(shape_arg, (tuple, list)):
                 if len(shape_arg) == 2:
-                    # (1, H, W) Shared Rect
                     final_shape = (1, shape_arg[0], shape_arg[1])
                 elif len(shape_arg) == 3:
-                    # (C, H, W) Per-Channel
                     final_shape = tuple(shape_arg)
                 else:
                     raise ValueError(f"Param '{param_name}': tuple shape must be length 2 (H,W) or 3 (C,H,W).")
             else:
                 raise ValueError(f"Param '{param_name}': shape must be int or tuple.")
-
         elif isinstance(init_arg, torch.Tensor):
             final_shape = init_arg.shape
         else:
             raise ValueError(f"Param '{param_name}': Provide 'shape' if 'init_value' is not Tensor.")
 
-        # --- Tensor Creation ---
         if isinstance(init_arg, torch.Tensor):
             if init_arg.shape != final_shape:
                 raise ValueError(
@@ -183,26 +180,69 @@ class CustomPooling2d(nn.Module):
                     f"mismatches config shape {final_shape}."
                 )
             data_tensor = init_arg.clone()
-
         elif isinstance(init_arg, (int, float)):
             data_tensor = torch.full(final_shape, fill_value=float(init_arg))
-
         else:
             raise TypeError(f"Param '{param_name}': 'init_value' type {type(init_arg)} not supported.")
 
-        # --- Registration ---
         self.pooling_params[param_name] = nn.Parameter(
             data_tensor,
             requires_grad=requires_grad
         )
 
+        self.pooling_param_clamps[param_name] = self._validate_clamp_tuple(clamp, param_name)
+
     def _apply_pooling_method(self, patches: torch.Tensor) -> torch.Tensor:
         """
         Applies the configured pooling function to extracted 2D patches.
         """
-        kwargs = {**self.pooling_params, **self.pooling_constants}
-        # Maintains original permutation logic
+        kwargs = self._get_clamped_pooling_kwargs()
+        kwargs.update(self.pooling_constants)
+
         return self.pooling_fn(patches, **kwargs).permute(0, 3, 1, 2, 4, 5).contiguous()
+
+    def _get_clamped_pooling_kwargs(self) -> Dict[str, torch.Tensor]:
+        """
+        Returns pooling parameters after applying their optional clamp ranges.
+        """
+        clamped_kwargs = {}
+
+        for param_name, param_value in self.pooling_params.items():
+            clamp_min, clamp_max = self.pooling_param_clamps.get(param_name, (None, None))
+            clamped_kwargs[param_name] = torch.clamp(param_value, min=clamp_min, max=clamp_max)
+
+        return clamped_kwargs
+
+    @staticmethod
+    def _validate_clamp_tuple(
+            clamp: Any,
+            param_name: str
+    ) -> Tuple[Optional[float], Optional[float]]:
+        """
+        Validates the clamp tuple for a pooling parameter.
+        """
+        if clamp is None:
+            return (None, None)
+
+        if not isinstance(clamp, (tuple, list)) or len(clamp) != 2:
+            raise ValueError(
+                f"Param '{param_name}': 'clamp' must be a tuple/list of length 2, e.g. (1e-6, 10.0)."
+            )
+
+        clamp_min, clamp_max = clamp
+
+        if clamp_min is not None and not isinstance(clamp_min, (int, float)):
+            raise TypeError(f"Param '{param_name}': clamp min must be int, float, or None.")
+
+        if clamp_max is not None and not isinstance(clamp_max, (int, float)):
+            raise TypeError(f"Param '{param_name}': clamp max must be int, float, or None.")
+
+        if clamp_min is not None and clamp_max is not None and clamp_min > clamp_max:
+            raise ValueError(
+                f"Param '{param_name}': clamp min ({clamp_min}) cannot be greater than clamp max ({clamp_max})."
+            )
+
+        return (clamp_min, clamp_max)
 
     @staticmethod
     def _compute_same_padding(input_size: Tuple[int, int], kernel_size: Tuple[int, int],
@@ -235,7 +275,6 @@ class CustomPooling2d(nn.Module):
         patches = tensor.unfold(2, window_size[0], stride[0])
         patches = patches.unfold(3, window_size[1], stride[1])
 
-        # Maintains original permutation logic
         return patches.permute(0, 2, 3, 1, 4, 5).contiguous()
 
     @staticmethod

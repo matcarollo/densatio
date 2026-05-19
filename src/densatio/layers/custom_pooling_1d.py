@@ -28,7 +28,7 @@ class CustomPooling1d(nn.Module):
         """
         Args:
             pool_size (int, optional): Size of the pooling window. Defaults to 2.
-            stride (int, optional): Stride of the pooling operation. Defaults to 1.
+            stride (int, optional): Stride of the pooling operation. Defaults to pool_size.
             padding (str, int, or tuple): Padding strategy.
                 - 'valid': No padding.
                 - 'same': Padding to maintain size (if stride=1).
@@ -37,12 +37,24 @@ class CustomPooling1d(nn.Module):
             pooling_method (str or callable): Name of function in `pooling_functions_1d` or a callable.
                 Defaults to 'max_pooling_1d'.
             pooling_params (dict, optional): Config for learnable parameters
-                (keys: 'shape', 'init_value', 'requires_grad').
+                (keys: 'shape', 'init_value', 'requires_grad', 'clamp').
+                The 'clamp' entry must be a tuple (min, max), where each value can be None.
         """
         super(CustomPooling1d, self).__init__()
 
-        self.pool_size = pool_size if pool_size is not None else 2
-        self.stride = stride if stride is not None else 1
+        if pool_size is None:
+            self.pool_size = 2
+        elif isinstance(pool_size, int):
+            self.pool_size = pool_size
+        else:
+            raise ValueError("pool_size must be an int")
+
+        if stride is None:
+            self.stride = self.pool_size
+        elif isinstance(stride, int):
+            self.stride = stride
+        else:
+            raise ValueError("stride must be an int")
 
         if isinstance(pooling_method, str):
             if not hasattr(pooling_functions_1d, pooling_method):
@@ -61,6 +73,7 @@ class CustomPooling1d(nn.Module):
 
         self.pooling_params = nn.ParameterDict()
         self.pooling_constants = {}
+        self.pooling_param_clamps: Dict[str, Tuple[Optional[float], Optional[float]]] = {}
 
         if pooling_params is not None:
             for param_name, param_config in pooling_params.items():
@@ -78,17 +91,17 @@ class CustomPooling1d(nn.Module):
             self.padding_type = 'custom'
             self.explicit_padding = tuple(padding)
         else:
-            raise ValueError("Padding must be 'same', 'valid', an int, or a 2-tuple.")
+            raise ValueError("Padding must be 'same', 'valid', an int, or a 2-tuple (left, right).")
 
     def forward(self, tensor: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass of the pooling layer.
+        Forward pass of the 1D pooling layer.
 
         Args:
             tensor (torch.Tensor): Input tensor of shape (Batch, Channels, Length).
 
         Returns:
-            torch.Tensor: Pooled output tensor of shape (Batch, Channels, OutputLength).
+            torch.Tensor: Pooled output tensor of shape (Batch, Channels, Length_out).
         """
         if self.padding_type == 'same':
             padding = self._compute_same_padding(tensor.shape[-1], self.pool_size, self.stride)
@@ -114,50 +127,47 @@ class CustomPooling1d(nn.Module):
 
     def _register_pooling_param(self, param_name: str, param_config: Dict[str, Any]) -> None:
         """
-        Registers a learnable parameter for the pooling operation.
+        Registers a learnable parameter for 1D pooling.
 
         Args:
             param_name (str): The name of the parameter.
-            param_config (dict): Configuration dictionary. Must contain:
-                - 'shape': int or tuple defining the parameter shape.
-                - 'init_value': float or torch.Tensor for initialization.
-                - 'requires_grad' (optional): bool, defaults to True.
-
-        Raises:
-            TypeError: If param_config is not a dictionary.
-            ValueError: If shape logic is inconsistent or types are invalid.
+            param_config (dict): Configuration dictionary.
+                Shape Logic for 1D:
+                - int: (1, L) [Shared]
+                - tuple(C, L): [Per-Channel]
         """
-
-        # 1. Strict type check: must be a dictionary
         if not isinstance(param_config, dict):
             raise TypeError(
-                f"Param '{param_name}': Configuration must be a dictionary (e.g., {{'shape': (C, L), 'init_value': 0.5}}). "
+                f"Param '{param_name}': Configuration must be a dictionary "
+                f"(e.g., {{'shape': (C, L), 'init_value': 0.5}}). "
                 f"Got {type(param_config).__name__} instead."
             )
 
         shape_arg = param_config.get('shape')
         init_arg = param_config.get('init_value')
         requires_grad = param_config.get('requires_grad', True)
+        clamp = param_config.get('clamp', (None, None))
 
         if init_arg is None:
             init_arg = 0.5
 
         if shape_arg is not None:
             if isinstance(shape_arg, int):
-                # (1, L): Shared across channels
                 final_shape = (1, shape_arg)
             elif isinstance(shape_arg, (tuple, list)):
-                # (C, L): Per-channel
-                final_shape = tuple(shape_arg)
+                if len(shape_arg) == 1:
+                    final_shape = (1, shape_arg[0])
+                elif len(shape_arg) == 2:
+                    final_shape = tuple(shape_arg)
+                else:
+                    raise ValueError(f"Param '{param_name}': tuple shape must be length 1 (L) or 2 (C,L).")
             else:
-                raise ValueError(f"Param '{param_name}': 'shape' must be int or tuple.")
-
+                raise ValueError(f"Param '{param_name}': shape must be int or tuple.")
         elif isinstance(init_arg, torch.Tensor):
             final_shape = init_arg.shape
         else:
-            raise ValueError(f"Param '{param_name}': You must provide 'shape' if 'init_value' is not a Tensor.")
+            raise ValueError(f"Param '{param_name}': Provide 'shape' if 'init_value' is not Tensor.")
 
-        # --- Tensor Creation ---
         if isinstance(init_arg, torch.Tensor):
             if init_arg.shape != final_shape:
                 raise ValueError(
@@ -165,49 +175,107 @@ class CustomPooling1d(nn.Module):
                     f"mismatches config shape {final_shape}."
                 )
             data_tensor = init_arg.clone()
-
         elif isinstance(init_arg, (int, float)):
             data_tensor = torch.full(final_shape, fill_value=float(init_arg))
-
         else:
             raise TypeError(f"Param '{param_name}': 'init_value' type {type(init_arg)} not supported.")
 
-        # --- Registration ---
         self.pooling_params[param_name] = nn.Parameter(
             data_tensor,
             requires_grad=requires_grad
         )
 
+        self.pooling_param_clamps[param_name] = self._validate_clamp_tuple(clamp, param_name)
+
     def _apply_pooling_method(self, patches: torch.Tensor) -> torch.Tensor:
         """
-        Applies the configured pooling function to extracted patches.
+        Applies the configured pooling function to extracted 1D patches.
         """
-        kwargs = {**self.pooling_params, **self.pooling_constants}
+        kwargs = self._get_clamped_pooling_kwargs()
+        kwargs.update(self.pooling_constants)
+
         return self.pooling_fn(patches, **kwargs).permute(0, 2, 1, 3).contiguous()
 
-    @staticmethod
-    def _compute_same_padding(length: int, window_size: int, stride: int) -> Tuple[int, int]:
-        """Computes symmetric padding to maintain input size (if stride=1)."""
-        out_len = (length + stride - 1) // stride
-        pad_needed = max((out_len - 1) * stride + window_size - length, 0)
-        left = pad_needed // 2
-        right = pad_needed - left
-        return (left, right)
+    def _get_clamped_pooling_kwargs(self) -> Dict[str, torch.Tensor]:
+        """
+        Returns pooling parameters after applying their optional clamp ranges.
+        """
+        clamped_kwargs = {}
+
+        for param_name, param_value in self.pooling_params.items():
+            clamp_min, clamp_max = self.pooling_param_clamps.get(param_name, (None, None))
+            clamped_kwargs[param_name] = torch.clamp(param_value, min=clamp_min, max=clamp_max)
+
+        return clamped_kwargs
 
     @staticmethod
-    def _extract_1d_patches(tensor: torch.Tensor, window_size: int, stride: int,
-                            padding: Tuple[int, int]) -> torch.Tensor:
+    def _validate_clamp_tuple(
+            clamp: Any,
+            param_name: str
+    ) -> Tuple[Optional[float], Optional[float]]:
+        """
+        Validates the clamp tuple for a pooling parameter.
+        """
+        if clamp is None:
+            return (None, None)
+
+        if not isinstance(clamp, (tuple, list)) or len(clamp) != 2:
+            raise ValueError(
+                f"Param '{param_name}': 'clamp' must be a tuple/list of length 2, e.g. (1e-6, 10.0)."
+            )
+
+        clamp_min, clamp_max = clamp
+
+        if clamp_min is not None and not isinstance(clamp_min, (int, float)):
+            raise TypeError(f"Param '{param_name}': clamp min must be int, float, or None.")
+
+        if clamp_max is not None and not isinstance(clamp_max, (int, float)):
+            raise TypeError(f"Param '{param_name}': clamp max must be int, float, or None.")
+
+        if clamp_min is not None and clamp_max is not None and clamp_min > clamp_max:
+            raise ValueError(
+                f"Param '{param_name}': clamp min ({clamp_min}) cannot be greater than clamp max ({clamp_max})."
+            )
+
+        return (clamp_min, clamp_max)
+
+    @staticmethod
+    def _compute_same_padding(input_size: int, kernel_size: int, stride: int) -> Tuple[int, int]:
+        """Computes symmetric padding for 1D input."""
+        out_length = (input_size + stride - 1) // stride
+        pad_total = max((out_length - 1) * stride + kernel_size - input_size, 0)
+
+        pad_left = pad_total // 2
+        pad_right = pad_total - pad_left
+
+        return (pad_left, pad_right)
+
+    @staticmethod
+    def _extract_1d_patches(
+            tensor: torch.Tensor,
+            window_size: int,
+            stride: int,
+            padding: Tuple[int, int]
+    ) -> torch.Tensor:
         """Extracts sliding windows from the 1D input tensor."""
-        if padding and (padding[0] > 0 or padding[1] > 0):
-            tensor = F.pad(tensor, (padding[0], padding[1]))
-        patches = tensor.unfold(dimension=2, size=window_size, step=stride)
+        if padding and any(p > 0 for p in padding):
+            tensor = F.pad(tensor, padding)
+
+        patches = tensor.unfold(2, window_size, stride)
+
         return patches.permute(0, 2, 1, 3).contiguous()
 
     @staticmethod
-    def _get_output_shape_after_pooling(input_shape: Tuple[int, ...], kernel_size: int,
-                                        stride: int, padding: Tuple[int, int]) -> Tuple[int, int, int]:
+    def _get_output_shape_after_pooling(
+            input_shape: Tuple[int, ...],
+            kernel_size: int,
+            stride: int,
+            padding: Tuple[int, int]
+    ) -> Tuple[int, int, int]:
         """Calculates the expected output shape."""
         batch_size, channels, length = input_shape
-        total_pad = sum(padding)
-        output_length = (length + total_pad - kernel_size) // stride + 1
-        return batch_size, channels, output_length
+        pad_total = padding[0] + padding[1]
+
+        out_length = (length + pad_total - kernel_size) // stride + 1
+
+        return batch_size, channels, out_length
