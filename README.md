@@ -49,7 +49,7 @@ x_1d = torch.randn(1, 64, 100)
 pool_1d = CustomPooling1d(
     pool_size=2, 
     stride=2, 
-    pooling_method="max_pooling"
+    pooling_method="max_pooling_1d"
 )
 out_1d = pool_1d(x_1d) # Output: (1, 64, 50)
 ```
@@ -67,7 +67,7 @@ x_2d = torch.randn(1, 64, 32, 32)
 pool_2d = CustomPooling2d(
     pool_size=2, 
     stride=2, 
-    pooling_method="max_pooling"
+    pooling_method="max_pooling_2d"
 )
 out_2d = pool_2d(x_2d) # Output: (1, 64, 16, 16)
 ```
@@ -85,7 +85,7 @@ x_3d = torch.randn(1, 64, 16, 32, 32)
 pool_3d = CustomPooling3d(
     pool_size=2, 
     stride=2, 
-    pooling_method="max_pooling"
+    pooling_method="max_pooling_3d"
 )
 out_3d = pool_3d(x_3d) # Output: (1, 64, 8, 16, 16)
 ```
@@ -164,7 +164,7 @@ pool = CustomPooling1d(
     pool_size=2,
     stride=2,
     padding='same',
-    pooling_method="weighted_max_pooling",
+    pooling_method="weighted_max_pooling_1d",
     pooling_params={
         'e_exponent': {
             # (Channels, Length) -> (3, 2)
@@ -187,7 +187,7 @@ pool = CustomPooling2d(
     pool_size=2,
     stride=2,
     padding='same',
-    pooling_method="weighted_max_pooling",
+    pooling_method="weighted_max_pooling_2d",
     pooling_params={
         'e_exponent': {
             # (1, Height, Width) -> (1, 2, 2)
@@ -208,7 +208,7 @@ Pass a specific tensor to initialize weights and freeze them.
 pool = CustomPooling1d(
     pool_size=2,
     stride=2,
-    pooling_method="weighted_max_pooling",
+    pooling_method="weighted_max_pooling_1d",
     pooling_params={
         'e_exponent': {
             # Manually setting values via Tensor.
