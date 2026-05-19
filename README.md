@@ -5,7 +5,7 @@
 It abstracts away the complexity of sliding windows (kernel, stride, padding, etc.) across multiple dimensions, allowing researchers to focus solely on the pooling logic.
 
 > **Research Origin:** This library implements the generalized pooling functions presented in the paper:
-> **[Enhancing feature compression and reconstruction in time-series and image domains with pseudo-overlap and pseudo-grouping pooling functions](https://www.sciencedirect.com/science/article/pii/S0950705126000766)** (ScienceDirect, 2026).
+> **[Enhancing feature compression and reconstruction in time-series and image domains with pseudo-overlap and pseudo-grouping pooling functions](https://www.sciencedirect.com/science/article/pii/S0950705126000766)** (Knowledge-Based Systems, 2026).
 
 ## ⚡ Pure PyTorch & Patch-based Efficiency
 
